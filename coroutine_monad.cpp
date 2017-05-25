@@ -20,12 +20,12 @@ template <template <typename> class Monad>
 Monad<int> bar(double x) {
   return int(x * 2);
 }
-
+#define COROUTINE_LAMBDAS_ARE_OK 1
 #if COROUTINE_LAMBDAS_ARE_OK
 TEST_CASE("coroutine lambda") {
   auto result = []() -> std::optional<int> {
-    auto x = co_await foo<std::optional>();
-    auto y = co_await bar<std::optional>(x);
+    auto x = co_await non_coroutine_pure<std::optional>(1.5);
+    auto y = co_await non_coroutine_pure<std::optional>(int(x * 2));
     co_return y;
   }();
   REQUIRE(result.value_or(42) == 3);

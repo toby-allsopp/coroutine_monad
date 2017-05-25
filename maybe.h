@@ -45,6 +45,7 @@ struct maybe_promise {
   auto final_suspend() { return std::experimental::suspend_never{}; }
 
   void return_value(T x) { *data = std::move(x); }
+  void unhandled_exception() {}
 };
 
 // This makes std::optional<T> useable as a coroutine return type. Strictly, this
