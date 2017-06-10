@@ -15,7 +15,7 @@ else()
 target_compile_options(${PROJECT_NAME} INTERFACE -std=c++1z -fcoroutines-ts)
 endif()
 
-add_executable(test_${PROJECT_NAME} main.cpp coroutine_monad.cpp)
+add_executable(test_${PROJECT_NAME} test_main.cpp test_optional.cpp test_expected.cpp)
 target_link_libraries(test_${PROJECT_NAME} ${PROJECT_NAME})
 
 enable_testing()
