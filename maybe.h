@@ -3,38 +3,10 @@
 
 // Make std::optional behave like the Maybe monad when used in a coroutine.
 
+#include "return_object_holder.h"
+
 #include <experimental/coroutine>
 #include <optional>
-
-template <typename T>
-struct return_object_holder {
-  // The staging object that is returned (by copy/move) to the caller of the coroutine.
-  T stage;
-
-  // When constructed, we construct the staging object by forwarding the args and then
-  // assign a pointer to it to the supplied reference to pointer.
-  template <typename... Args>
-  return_object_holder(T*& p, Args&&... args) : stage{std::forward<Args>(args)...} {
-    p = &stage;
-  }
-  return_object_holder(return_object_holder const&) {
-    // A non-trivial copy constructor is required to ensure that an object of this class
-    // is not returned via registers, as that can result in the value of `this` being
-    // different in our constructor than later on. Note that deleting the copy constructor
-    // is not sufficient until all compilers implement the updated wording in
-    // https://wg21.link/p0135r1.
-    throw std::logic_error("return object must not be copied!");
-  }
-
-  // We assume that we will be converted only once, so we can move from the staging
-  // object.
-  operator T() { return std::move(stage); }
-};
-
-template <typename T>
-auto make_return_object_holder(T*& p) {
-  return return_object_holder<T>{p};
-}
 
 template <typename T>
 struct maybe_promise {
