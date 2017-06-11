@@ -19,7 +19,8 @@ struct return_object_holder {
   // Because we rely on the address of the stage member remaining constant, we forbid
   // copying and assignment.
   return_object_holder(return_object_holder const&) = delete;
-  return_object_holder(return_object_holder&& other) : stage(std::move(other.stage)). p(other.p) {}
+  return_object_holder(return_object_holder&& other)
+      : stage(std::move(other.stage)), p(other.p) {}
   void operator=(return_object_holder const&) = delete;
   void operator=(return_object_holder&&) = delete;
 
