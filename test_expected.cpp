@@ -19,9 +19,12 @@ expected<int, error> test_expected_manual() {
   return z;
 }
 
-inline auto pair_with = [](auto&& x) {
-  return [x](auto&& y) { return std::pair{std::move(x), std::forward<decltype(y)>(y)}; };
-};
+template <typename T>
+auto pair_with(T&& x) {
+  return [x](auto&& y) {
+    return std::make_pair(std::move(x), std::forward<decltype(y)>(y));
+  };
+}
 
 expected<int, error> test_expected_then() {
   // clang-format off

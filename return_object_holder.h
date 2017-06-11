@@ -7,18 +7,19 @@ template <typename T>
 struct return_object_holder {
   // The staging object that is returned (by copy/move) to the caller of the coroutine.
   T stage;
+  T*& p;
 
   // When constructed, we construct the staging object by forwarding the args and then
   // assign a pointer to it to the supplied reference to pointer.
   template <typename... Args>
-  return_object_holder(T*& p, Args&&... args) : stage{std::forward<Args>(args)...} {
+  return_object_holder(T*& p, Args&&... args) : stage{std::forward<Args>(args)...}, p(p) {
     p = &stage;
   }
 
   // Because we rely on the address of the stage member remaining constant, we forbid
   // copying and assignment.
   return_object_holder(return_object_holder const&) = delete;
-  return_object_holder(return_object_holder&&)      = delete;
+  return_object_holder(return_object_holder&& other) : stage(std::move(other.stage)). p(other.p) {}
   void operator=(return_object_holder const&) = delete;
   void operator=(return_object_holder&&) = delete;
 
