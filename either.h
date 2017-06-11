@@ -13,7 +13,7 @@ struct either_awaitable;
 
 template <typename T, typename E>
 struct either_promise {
-  expected<T, E>* data;
+  return_object_holder<expected<T, E>>* data;
 
   auto get_return_object() { return make_return_object_holder(data); }
   auto initial_suspend() { return std::experimental::suspend_never{}; }
@@ -24,7 +24,7 @@ struct either_promise {
     return either_awaitable<U, E>{std::move(e)};
   }
 
-  void return_value(T x) { *data = std::move(x); }
+  void return_value(T x) { data->emplace(std::move(x)); }
   // void return_value(E x) { *data = std::move(x); }
   void unhandled_exception() {}
 };
@@ -44,7 +44,7 @@ struct either_awaitable {
   template <typename U>
   constexpr void await_suspend(
       std::experimental::coroutine_handle<either_promise<U, E>> h) {
-    h.promise().data->set_error(std::move(e.error()));
+    h.promise().data->emplace(std::move(e.error()));
     h.destroy();
   }
 };

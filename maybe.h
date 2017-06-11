@@ -10,13 +10,13 @@
 
 template <typename T>
 struct maybe_promise {
-  std::optional<T>* data;
+  return_object_holder<std::optional<T>>* data;
 
   auto get_return_object() { return make_return_object_holder(data); }
   auto initial_suspend() { return std::experimental::suspend_never{}; }
   auto final_suspend() { return std::experimental::suspend_never{}; }
 
-  void return_value(T x) { *data = std::move(x); }
+  void return_value(T x) { data->emplace(std::move(x)); }
   void unhandled_exception() {}
 };
 
@@ -38,7 +38,7 @@ struct maybe_awaitable {
 
   template <typename U>
   void await_suspend(std::experimental::coroutine_handle<maybe_promise<U>> h) {
-    h.promise().data->reset();
+    h.promise().data->emplace(std::nullopt);
     h.destroy();
   }
 };
