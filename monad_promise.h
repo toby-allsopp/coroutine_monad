@@ -46,7 +46,7 @@ struct shared_coroutine_handle {
     std::cout << this << ": shared_coroutine_handle copy constructor: h = " << h.address()
               << std::endl;
   }
-  shared_coroutine_handle(shared_coroutine_handle&& o) {
+  shared_coroutine_handle(shared_coroutine_handle&& o) noexcept {
     h = std::exchange(o.h, nullptr);
     std::cout << this << ": shared_coroutine_handle move constructor: h = " << h.address()
               << std::endl;
@@ -83,8 +83,14 @@ struct monad_promise {
   using handle_type = std::experimental::coroutine_handle<monad_promise>;
   return_object_holder<M>* data;
   std::vector<std::optional<M>*> bind_return_storage;
+
   int ref_count = 0;
-  shared_coroutine_handle<monad_promise> sch{handle_type::from_promise(*this)};
+  // The use of unique_ptr here is because MSVC 14.11 can't instantiate coroutine_handle
+  // for an incomplete type.
+  std::unique_ptr<shared_coroutine_handle<monad_promise>> psch =
+      std::make_unique<shared_coroutine_handle<monad_promise>>(
+          handle_type::from_promise(*this));
+  shared_coroutine_handle<monad_promise>& sch = *psch;
   int susp_count = 0;
 
   ~monad_promise() { std::cout << this << ": ~monad_promise" << std::endl; }
@@ -135,8 +141,16 @@ struct monad_promise {
 
   auto get_return_object() { return make_return_object_holder(data); }
   auto initial_suspend() {
-    bind_return_storage.push_back(&data->stage);
-    return std::experimental::suspend_never{};
+    struct suspend : std::experimental::suspend_never {
+      monad_promise* p;
+      suspend(monad_promise* p) : p(p) {}
+      bool await_ready() {
+        // We rely on get_return_object having been called already as required by N4680.
+        p->bind_return_storage.push_back(&p->data->stage);
+        return true;
+      }
+    };
+    return suspend(this);
   }
   auto final_suspend() {
     std::cout << this << ": final_suspend" << std::endl;
