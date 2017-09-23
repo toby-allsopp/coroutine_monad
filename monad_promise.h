@@ -81,8 +81,13 @@ struct monad_awaitable;
 template <typename M>
 struct monad_promise {
   using handle_type = std::experimental::coroutine_handle<monad_promise>;
+
+  // So that we can defer initialization of the return object until we know
+  // what the return value of the coroutine will be.
   return_object_holder<M>* data;
-  std::vector<std::optional<M>*> bind_return_storage;
+
+  // A stack of places to store the results of the monadic bind operations.
+  std::vector<deferred<M>*> bind_return_storage;
 
   int ref_count = 0;
   // The use of unique_ptr here is because MSVC 14.11 can't instantiate coroutine_handle
@@ -95,7 +100,7 @@ struct monad_promise {
 
   ~monad_promise() { std::cout << this << ": ~monad_promise" << std::endl; }
 
-  void push_storage(std::optional<M>& storage) {
+  void push_storage(deferred<M>& storage) {
     bind_return_storage.push_back(&storage);
   }
 
@@ -116,12 +121,6 @@ struct monad_promise {
     std::cout << this << ": inc_ref -> " << ref_count << std::endl;
   }
 
-  void maybe_destroy() {
-    if (susp_count > 0 && ref_count == 0) {
-      handle_type::from_promise(*this).destroy();
-    }
-  }
-
   void dec_ref() {
     --ref_count;
     std::cout << this << ": dec_ref -> " << ref_count << std::endl;
@@ -130,21 +129,39 @@ struct monad_promise {
 
   void on_suspend() {
     ++susp_count;
+    // susp_count should always be == 1 here
     std::cout << this << ": on_suspend -> " << susp_count << std::endl;
     maybe_destroy();
   }
 
   void on_resume() {
     --susp_count;
+    // susp_count should always be == 0 here
     std::cout << this << ": on_resume -> " << susp_count << std::endl;
+  }
+
+  // We destroy the coroutine if it is suspended and unreferenced. If it is not
+  // suspended then it will flow off the end and be destroyed automatically. If
+  // it is unreferences then we know it will never be resumed, so needs to be
+  // destroyed,
+  void maybe_destroy() {
+    if (susp_count > 0 && ref_count == 0) {
+      handle_type::from_promise(*this).destroy();
+    }
   }
 
   auto get_return_object() { return make_return_object_holder(data); }
   auto initial_suspend() {
+    // N4680 says that get_return_object is called before initial_suspend, but
+    // MSVC 14.1 calls initial_suspend first. However, it does call
+    // get_return_object before calling await_ready on the result of
+    // initial_suspend().
     struct suspend : std::experimental::suspend_never {
       monad_promise* p;
       suspend(monad_promise* p) : p(p) {}
       bool await_ready() {
+	// The first item on the stack of places to store the results of bind
+	// is the return value of the coroutine itself.
         // We rely on get_return_object having been called already as required by N4680.
         p->bind_return_storage.push_back(&p->data->stage);
         return true;
@@ -181,7 +198,7 @@ template <typename M>
 struct monad_awaitable {
   M e;
   using T = typename monad_traits<M>::value_type;
-  std::optional<T> value;
+  deferred<T> value;
 
   constexpr bool await_ready() noexcept { return false; }
 
@@ -204,16 +221,13 @@ struct monad_awaitable {
       value = std::move(x);
       std::cout << this << ": calling resume on " << h.address() << std::endl;
       // Provide storage for the return value
-      std::optional<monad_rebind_t<M, U>> storage;
+      deferred<monad_rebind_t<M, U>> storage;
       h.promise().push_storage(storage);
       // Return from co_await
       h.promise().on_resume();
       h.resume();
       std::cout << this << ": resume returned " << std::endl;
       // Return the result of the next bind or co_return
-      if (!storage) {
-        throw std::logic_error("Unpossible!");
-      }
       std::cout << this << ": bind returning" << std::endl;
       return *storage;
     };

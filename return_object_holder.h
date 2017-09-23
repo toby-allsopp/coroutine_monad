@@ -6,10 +6,14 @@
 
 #include <iostream>
 
+// An object that starts out unitialized. Initialized by a call to emplace.
+template <typename T>
+using deferred = std::optional<T>;
+
 template <typename T>
 struct return_object_holder {
   // The staging object that is returned (by copy/move) to the caller of the coroutine.
-  std::optional<T> stage;
+  deferred<T> stage;
   return_object_holder*& p;
 
   // When constructed, we assign a pointer to ourselves to the supplied reference to
