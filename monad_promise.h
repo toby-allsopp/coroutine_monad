@@ -34,7 +34,7 @@ using monad_rebind_t = typename monad_traits<M>::template rebind<U>;
 template <typename P>
 struct shared_coroutine_handle {
   using handle_type = std::experimental::coroutine_handle<P>;
-  handle_type h = nullptr;
+  handle_type h = {};
 
   shared_coroutine_handle() = default;
   shared_coroutine_handle(handle_type h) : h(h) {
@@ -47,7 +47,7 @@ struct shared_coroutine_handle {
               << std::endl;
   }
   shared_coroutine_handle(shared_coroutine_handle&& o) noexcept {
-    h = std::exchange(o.h, nullptr);
+    h = std::exchange(o.h, {});
     std::cout << this << ": shared_coroutine_handle move constructor: h = " << h.address()
               << std::endl;
   }
@@ -60,7 +60,7 @@ struct shared_coroutine_handle {
   }
   shared_coroutine_handle& operator=(shared_coroutine_handle&& o) {
     reset();
-    h = std::exchange(o.h, nullptr);
+    h = std::exchange(o.h, {});
     return *this;
   }
 
@@ -70,7 +70,7 @@ struct shared_coroutine_handle {
   }
 
   void reset() {
-    auto h2 = std::exchange(h, nullptr);
+    auto h2 = std::exchange(h, {});
     if (h2) h2.promise().dec_ref();
   }
 };
