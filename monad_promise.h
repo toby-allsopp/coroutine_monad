@@ -200,6 +200,14 @@ struct monad_awaitable {
   using T = typename monad_traits<M>::value_type;
   deferred<T> value;
 
+  monad_awaitable(M&& e) : e(std::move(e)) {
+    std::cout << this << ": monad_awaitable()" << std::endl;
+  }
+
+  ~monad_awaitable() {
+    std::cout << this << ": ~monad_awaitable()" << std::endl;
+  }
+
   constexpr bool await_ready() noexcept { return false; }
 
   constexpr auto await_resume() noexcept { return std::move(*value); }
