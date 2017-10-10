@@ -34,7 +34,7 @@ template <typename T>
 struct maybe_awaitable {
   std::optional<T> o;
   auto await_ready() { return o.has_value(); }
-  auto await_resume() { return o.value(); }
+  auto await_resume() { return *o; }
 
   template <typename U>
   void await_suspend(std::experimental::coroutine_handle<maybe_promise<U>> h) {
