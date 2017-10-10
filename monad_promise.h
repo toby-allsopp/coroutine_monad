@@ -210,7 +210,10 @@ struct monad_awaitable {
 
   constexpr bool await_ready() noexcept { return false; }
 
-  constexpr auto await_resume() noexcept { return std::move(*value); }
+  constexpr auto await_resume() noexcept {
+    std::cout << this << ": await_resume" << std::endl;
+    return std::move(*value);
+  }
 
   template <typename U>
   void await_suspend(
