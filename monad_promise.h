@@ -245,7 +245,7 @@ struct monad_awaitable {
     // We bind our continuation into the value that was co_awaited. This returns, possibly
     // after resuming the coroutine, possibly immediately.
     std::cout << this << ": calling bind" << std::endl;
-    auto tmp = e >>= std::move(k);
+    auto tmp = std::move(e) >>= std::move(k);
     std::cout << this << ": bind returned" << std::endl;
     h.promise().emplace_value(std::move(tmp));
   }
