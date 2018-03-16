@@ -5,6 +5,7 @@
 
 #include <experimental/fundamental/v3/value_type.hpp>
 #include <experimental/make.hpp>
+#include <experimental/functor.hpp>
 #include <experimental/monad.hpp>
 
 #include <experimental/coroutine>
