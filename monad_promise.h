@@ -3,33 +3,21 @@
 
 #include "return_object_holder.h"
 
+#include <experimental/fundamental/v3/value_type.hpp>
+#include <experimental/make.hpp>
+#include <experimental/monad.hpp>
+
 #include <experimental/coroutine>
 #include <iostream>
 #include <tuple>
 #include <vector>
 
-template <typename T>
-struct monad_traits;
-
 template <typename M, typename F>
-auto fmap(M&& m, F&& f) {
-  return monad_traits<std::remove_cv_t<std::remove_reference_t<M>>>::fmap(
-      std::forward<M>(m), std::forward<F>(f));
+auto operator>>=(M&& m, F&& f)
+    -> decltype(std::experimental::monad::bind(std::forward<M>(m),
+                                               std::forward<F>(f))) {
+  return std::experimental::monad::bind(std::forward<M>(m), std::forward<F>(f));
 }
-
-template <typename M, typename F>
-auto operator>>=(M&& m, F&& f) {
-  return monad_traits<std::remove_cv_t<std::remove_reference_t<M>>>::bind(
-      std::forward<M>(m), std::forward<F>(f));
-}
-
-template <typename M, typename A>
-auto pure(A&& a) {
-  return monad_traits<M>::pure(std::forward<A>(a));
-}
-
-template <typename M, typename U>
-using monad_rebind_t = typename monad_traits<M>::template rebind<U>;
 
 template <typename P>
 struct shared_coroutine_handle {
@@ -38,18 +26,20 @@ struct shared_coroutine_handle {
 
   shared_coroutine_handle() = default;
   shared_coroutine_handle(handle_type h) : h(h) {
-    // Note that we don't increment the reference count stored in h.promise() here. This
-    // is because of the way the promise itself holds a shared_coroutine_handle to itself.
+    // Note that we don't increment the reference count stored in h.promise()
+    // here. This is because of the way the promise itself holds a
+    // shared_coroutine_handle to itself.
   }
-  shared_coroutine_handle(shared_coroutine_handle const& o) : shared_coroutine_handle() {
+  shared_coroutine_handle(shared_coroutine_handle const& o)
+      : shared_coroutine_handle() {
     *this = o;
-    std::cout << this << ": shared_coroutine_handle copy constructor: h = " << h.address()
-              << std::endl;
+    std::cout << this << ": shared_coroutine_handle copy constructor: h = "
+              << h.address() << std::endl;
   }
   shared_coroutine_handle(shared_coroutine_handle&& o) noexcept {
     h = std::exchange(o.h, {});
-    std::cout << this << ": shared_coroutine_handle move constructor: h = " << h.address()
-              << std::endl;
+    std::cout << this << ": shared_coroutine_handle move constructor: h = "
+              << h.address() << std::endl;
   }
 
   shared_coroutine_handle& operator=(shared_coroutine_handle const& o) {
@@ -65,7 +55,8 @@ struct shared_coroutine_handle {
   }
 
   ~shared_coroutine_handle() {
-    std::cout << this << ": ~shared_coroutine_handle: h = " << h.address() << std::endl;
+    std::cout << this << ": ~shared_coroutine_handle: h = " << h.address()
+              << std::endl;
     reset();
   }
 
@@ -84,14 +75,17 @@ struct monad_promise {
 
   // So that we can defer initialization of the return object until we know
   // what the return value of the coroutine will be.
-  return_object_holder<M>* data;
+  return_object_holder<M>* return_object;
 
   // A stack of places to store the results of the monadic bind operations.
+  // These pointers point either into the return object in the coroutine frame
+  // (the bottom of the stack) or to local variables in the continuations passed
+  // to bind (the rest of the stack).
   std::vector<deferred<M>*> bind_return_storage;
 
   int ref_count = 0;
-  // The use of unique_ptr here is because MSVC 14.11 can't instantiate coroutine_handle
-  // for an incomplete type.
+  // The use of unique_ptr here is because MSVC 14.11 can't instantiate
+  // coroutine_handle for an incomplete type.
   std::unique_ptr<shared_coroutine_handle<monad_promise>> psch =
       std::make_unique<shared_coroutine_handle<monad_promise>>(
           handle_type::from_promise(*this));
@@ -107,7 +101,7 @@ struct monad_promise {
   template <typename... Args>
   void emplace_value(Args&&... args) {
     auto storage = bind_return_storage.back();
-    if (storage != &data->stage) {
+    if (storage != &return_object->stage) {
       std::cout << this << ": setting bind_return_storage" << std::endl;
     } else {
       std::cout << this << ": setting stage" << std::endl;
@@ -142,7 +136,7 @@ struct monad_promise {
 
   // We destroy the coroutine if it is suspended and unreferenced. If it is not
   // suspended then it will flow off the end and be destroyed automatically. If
-  // it is unreferences then we know it will never be resumed, so needs to be
+  // it is unreferenced then we know it will never be resumed, so needs to be
   // destroyed,
   void maybe_destroy() {
     if (susp_count > 0 && ref_count == 0) {
@@ -150,7 +144,8 @@ struct monad_promise {
     }
   }
 
-  auto get_return_object() { return make_return_object_holder(data); }
+  auto get_return_object() { return make_return_object_holder(return_object); }
+
   auto initial_suspend() {
     // N4680 says that get_return_object is called before initial_suspend, but
     // MSVC 14.1 calls initial_suspend first. However, it does call
@@ -160,10 +155,11 @@ struct monad_promise {
       monad_promise* p;
       suspend(monad_promise* p) : p(p) {}
       bool await_ready() {
-	// The first item on the stack of places to store the results of bind
-	// is the return value of the coroutine itself.
-        // We rely on get_return_object having been called already as required by N4680.
-        p->bind_return_storage.push_back(&p->data->stage);
+        // The first item on the stack of places to store the results of bind
+        // is the return value of the coroutine itself.
+        // We rely on get_return_object having been called already as required
+        // by N4680.
+        p->bind_return_storage.push_back(&p->return_object->stage);
         return true;
       }
     };
@@ -177,14 +173,25 @@ struct monad_promise {
     return suspend{};
   }
 
-  template <typename U>
-  auto await_transform(monad_rebind_t<M, U> e) {
-    return monad_awaitable<decltype(e)>{std::move(e)};
+  using TC = std::experimental::type_constructor_t<M>;
+  using ValueType = std::experimental::value_type_t<M>;
+
+  // co_await is allowed for any type with the same type_constructor, i.e. the
+  // same monad
+  template <typename N,
+            typename = std::enable_if_t<
+                std::is_same_v<std::experimental::type_constructor_t<
+                                   std::experimental::meta::uncvref_t<N>>,
+                               TC>>>
+  auto await_transform(N&& e) {
+    return monad_awaitable<std::experimental::meta::uncvref_t<N>>{
+        std::forward<N>(e)};
   }
 
-  // co_return with a value of the contained type is a shorthand for calling pure
-  void return_value(typename monad_traits<M>::value_type x) {
-    return_value(monad_traits<M>::pure(std::move(x)));
+  // co_return with a value of the contained type is a shorthand for calling
+  // pure
+  void return_value(ValueType x) {
+    return_value(std::experimental::make<TC>(std::move(x)));
   }
   void return_value(M x) {
     std::cout << this << ": return_value called" << std::endl;
@@ -196,11 +203,11 @@ struct monad_promise {
 
 template <typename M>
 struct monad_awaitable {
-  M e;
-  using T = typename monad_traits<M>::value_type;
-  deferred<T> value;
+  M x;
+  using T = std::experimental::value_type_t<M>;
+  deferred<T> result;
 
-  monad_awaitable(M&& e) : e(std::move(e)) {
+  monad_awaitable(M x) : x(std::move(x)) {
     std::cout << this << ": monad_awaitable()" << std::endl;
   }
 
@@ -212,40 +219,44 @@ struct monad_awaitable {
 
   constexpr auto await_resume() noexcept {
     std::cout << this << ": await_resume" << std::endl;
-    return std::move(*value);
+    return std::move(*result);
   }
 
-  template <typename U>
-  void await_suspend(
-      std::experimental::coroutine_handle<monad_promise<monad_rebind_t<M, U>>> h) {
-    // Register that we require the coroutine to stay alive so that we can write the
-    // return value into it.
+  template <typename N>
+  void await_suspend(std::experimental::coroutine_handle<monad_promise<N>> h) {
+    // Register that we require the coroutine to stay alive so that we can write
+    // the return value into it.
     auto sch = h.promise().sch;
     // Let the promise know that the coroutine is suspended.
     h.promise().on_suspend();
 
-    // Create the continuation that we will pass to bind. This also registers that it
-    // wants the coroutine to stay alive as long as the continuation stays alive so that
-    // it can receive the return value of future suspend points.
-    auto k = [this, h, sch](T x) mutable {
+    // Create the continuation that we will pass to bind. This also registers
+    // that it wants the coroutine to stay alive as long as the continuation
+    // stays alive so that it can receive the return value of future suspend
+    // points.
+    auto k = [this, h2 = h, sch](auto&& x) {
+      auto h = h2;  // resume() is not const, but it's easily worked around by
+                    // just copying the handle
       // Set the value to be returned from co_await
-      value = std::move(x);
+      result.emplace(std::forward<decltype(x)>(x));
       std::cout << this << ": calling resume on " << h.address() << std::endl;
       // Provide storage for the return value
-      deferred<monad_rebind_t<M, U>> storage;
+      deferred<N> storage;
       h.promise().push_storage(storage);
-      // Return from co_await
+      // Let the promise know that the coroutine is (about to be) resumed.
       h.promise().on_resume();
+      // Resume the coroutine, returning from co_await
       h.resume();
       std::cout << this << ": resume returned " << std::endl;
       // Return the result of the next bind or co_return
       std::cout << this << ": bind returning" << std::endl;
       return *storage;
     };
-    // We bind our continuation into the value that was co_awaited. This returns, possibly
-    // after resuming the coroutine, possibly immediately.
+    // We call bind with the value that was co_awaited and our continuation. The
+    // implementation of bind can choose to call the continuation before
+    // returning or some time later or never.
     std::cout << this << ": calling bind" << std::endl;
-    auto tmp = std::move(e) >>= std::move(k);
+    auto tmp = std::experimental::monad::bind(std::move(x), std::move(k));
     std::cout << this << ": bind returned" << std::endl;
     h.promise().emplace_value(std::move(tmp));
   }

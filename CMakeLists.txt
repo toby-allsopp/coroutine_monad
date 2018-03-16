@@ -7,8 +7,6 @@ target_include_directories(${PROJECT_NAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 target_sources(${PROJECT_NAME} INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/return_object_holder.h
     ${CMAKE_CURRENT_SOURCE_DIR}/maybe.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/expected.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/either.h
     ${CMAKE_CURRENT_SOURCE_DIR}/state.h
     ${CMAKE_CURRENT_SOURCE_DIR}/monad_promise.h
 )
