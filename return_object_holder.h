@@ -4,10 +4,16 @@
 #include <optional>
 #include <utility>
 
+#include <iostream>
+
+// An object that starts out unitialized. Initialized by a call to emplace.
+template <typename T>
+using deferred = std::optional<T>;
+
 template <typename T>
 struct return_object_holder {
   // The staging object that is returned (by copy/move) to the caller of the coroutine.
-  std::optional<T> stage;
+  deferred<T> stage;
   return_object_holder*& p;
 
   // When constructed, we assign a pointer to ourselves to the supplied reference to
@@ -28,17 +34,21 @@ struct return_object_holder {
 
   // A non-trivial destructor is required until
   // https://bugs.llvm.org//show_bug.cgi?id=28593 is fixed.
-  ~return_object_holder() {}
+  ~return_object_holder() { std::cout << this << ": ~return_object_holder" << std::endl; }
 
   // Construct the staging value; arguments are perfect forwarded to T's constructor.
   template <typename... Args>
   void emplace(Args&&... args) {
+    std::cout << this << ": emplace" << std::endl;
     stage.emplace(std::forward<Args>(args)...);
   }
 
   // We assume that we will be converted only once, so we can move from the staging
   // object. We also assume that `emplace` has been called at least once.
-  operator T() { return std::move(*stage); }
+  operator T() {
+    std::cout << this << ": operator T" << std::endl;
+    return std::move(*stage);
+  }
 };
 
 template <typename T>

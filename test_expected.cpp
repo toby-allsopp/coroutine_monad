@@ -30,7 +30,7 @@ expected<int, error> test_expected_then() {
   // clang-format off
   auto z =
       f1()
-      .then([](auto x) { return f2(x).transform(pair_with(x)); })
+      .then([](auto x) { return f2(x).then(pair_with(x)); })
       .then([](auto p) { auto[x, y] = p; return f3(x, y); });
   // clang-format on
   return z;
@@ -47,6 +47,32 @@ auto test_expected_coroutine() {
 
 TEST_CASE("expected") {
   auto r = test_expected_coroutine();
+  REQUIRE(!r.good());
+  REQUIRE(r.error().code == 42);
+}
+
+TEST_CASE("return") {
+  auto r = []() -> expected<int, error> { co_return 7; }();
+  REQUIRE(r.good());
+  REQUIRE(r.value() == 7);
+}
+
+TEST_CASE("await good") {
+  auto r = []() -> expected<int, error> {
+    auto x = co_await expected<int, error>(7);
+    REQUIRE(x == 7);
+    co_return x;
+  }();
+  REQUIRE(r.good());
+  REQUIRE(r.value() == 7);
+}
+
+TEST_CASE("await error") {
+  auto r = []() -> expected<int, error> {
+    auto x = co_await expected<int, error>(error{42});
+    FAIL();
+    co_return x;
+  }();
   REQUIRE(!r.good());
   REQUIRE(r.error().code == 42);
 }

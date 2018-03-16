@@ -5,6 +5,14 @@
 #include <utility>
 
 template <typename T, typename E>
+class expected;
+
+template <typename C>
+constexpr bool is_expected = false;
+template <typename T, typename E>
+constexpr bool is_expected<expected<T, E>> = true;
+
+template <typename T, typename E>
 class expected {
   union {
     T m_value;
@@ -50,18 +58,21 @@ class expected {
 
   explicit operator bool() const { return m_good; }
   bool good() const { return m_good; }
-  T const& value() const { return m_value; }
-  T& value() { return m_value; }
+  T const& value() const& { return m_value; }
+  T& value() & { return m_value; }
+  T&& value() && { return std::move(m_value); }
   E const& error() const { return m_error; }
   E& error() { return m_error; }
 
   template <typename F>
-  auto then(F&& f) const -> std::result_of_t<F(T)> {
+  auto then(F&& f) const
+      -> std::enable_if_t<is_expected<std::result_of_t<F(T)>>, std::result_of_t<F(T)>> {
     if (good()) return f(value());
     return error();
   }
   template <typename F>
-  auto transform(F&& f) const -> expected<std::result_of_t<F(T)>, E> {
+  auto then(F&& f) const -> std::enable_if_t<!is_expected<std::result_of_t<F(T)>>,
+                                             expected<std::result_of_t<F(T)>, E>> {
     if (good()) return f(value());
     return error();
   }
