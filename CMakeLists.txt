@@ -13,7 +13,8 @@ target_sources(${PROJECT_NAME} INTERFACE
 if(MSVC)
 target_compile_options(${PROJECT_NAME} INTERFACE /std:c++latest /await)
 else()
-target_compile_options(${PROJECT_NAME} INTERFACE -std=c++1z -fcoroutines-ts)
+target_compile_options(${PROJECT_NAME} INTERFACE -std=c++17 -fcoroutines-ts -stdlib=libc++)
+target_link_libraries(${PROJECT_NAME} INTERFACE -stdlib=libc++)
 endif()
 
 add_executable(test_${PROJECT_NAME}
