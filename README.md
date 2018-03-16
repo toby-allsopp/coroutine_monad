@@ -1,20 +1,32 @@
 # Using coroutines for monadic composition
 
-This repository shows how coroutines can be used to compose operations that return types that either contain a result to be used in further computation or sn indication of error.
+This repository shows how coroutines can be used to compose operations that
+return monadic types.
+
+One example of a monadic type is one that either contain a result to be used in
+further computation or an indication of error, such as `std::optional<T>`.
 
 The goal is to make such composition as easy as Haskell's `do` notation.
 
 ## Requirements
 
-The implemetation requires an implementation of the Coroutines TS (https://isocpp.org/files/papers/N4663.pdf). As of June 10, 2017, the only such implementation is a trunk build of clang with trunk libc++.
+The implementation requires an implementation of the Coroutines TS
+(https://isocpp.org/files/papers/N4680.pdf). As of March 10, 2018, the only such
+implementation is Clang 5 or later with a corresponding libc++.
 
-In particular, the MSVC implementation convert the object returned by `get_return_object` to the return type of the coroutine immediately rather than waiting until the coroutine returns to its caller.
+In particular, the MSVC implementation converts the object returned by
+`get_return_object` to the return type of the coroutine immediately rather than
+waiting until the coroutine returns to its caller.
 
-## Example
+## Expected
 
-See [`test_expected.cpp`](test_expected.cpp) for three different ways to compose a sequence of calls to functions returning `expected` values.
+See [`test_expected.cpp`](test_expected.cpp) for three different ways to compose
+a sequence of calls to functions returning `expected` values.
 
-The `expected` in question is a very simple example defined in [`expected.h`](expected.h); this is not intended to be anywhere near fully-featured (and is probably not even correct). This definition knows nothing about coroutines; all of the coroutine machinery is in [`either.h`](either.h).
+The `expected` in question is that from viboes' std-make repository. This
+definition knows nothing about coroutines; all of the coroutine machinery is in
+[`moand_promise.h`](moand_promise.h) and
+[`test_expected.cpp`](test_expected.cpp).
 
 Here's what one can write in Haskell:
 
@@ -45,9 +57,9 @@ struct error {
   int code;
 };
 
-expected<int, error> f1() noexcept { return 7; }
-expected<double, error> f2(int x) noexcept { return 2.0 * x; }
-expected<int, error> f3(int x, double y) noexcept { return error{42}; }
+expected<int, error> f1() { return 7; }
+expected<double, error> f2(int x) { return 2.0 * x; }
+expected<int, error> f3(int x, double y) { return error{42}; }
 
 auto test_expected_coroutine() {
   return []() -> expected<int, error> {
@@ -58,3 +70,9 @@ auto test_expected_coroutine() {
   }();
 }
 ```
+
+## State
+
+An implementation of the State monad can be found in [`state.h`](state.h).
+Examples of its usage, both with and without coroutines, are in
+[`test_state.cpp`](test_state.cpp).
