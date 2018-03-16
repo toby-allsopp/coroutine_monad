@@ -1,0 +1,3 @@
+[submodule "std-make"]
+	path = std-make
+	url = https://github.com/viboes/std-make.git
