@@ -3,9 +3,9 @@
 
 #include "return_object_holder.h"
 
+#include <experimental/functor.hpp>
 #include <experimental/fundamental/v3/value_type.hpp>
 #include <experimental/make.hpp>
-#include <experimental/functor.hpp>
 #include <experimental/monad.hpp>
 
 #include <experimental/coroutine>
@@ -235,7 +235,10 @@ struct monad_awaitable {
     // that it wants the coroutine to stay alive as long as the continuation
     // stays alive so that it can receive the return value of future suspend
     // points.
-    auto k = [this, h2 = h, sch](auto&& x) {
+    auto k = [this, h2 = h, sch, invoked = std::make_shared<bool>(false)](
+                 auto&& x) {
+      if (std::exchange(*invoked, true))
+        throw std::logic_error("coroutine continuation invoked more than once");
       auto h = h2;  // resume() is not const, but it's easily worked around by
                     // just copying the handle
       // Set the value to be returned from co_await

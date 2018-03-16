@@ -18,6 +18,24 @@ In particular, the MSVC implementation converts the object returned by
 `get_return_object` to the return type of the coroutine immediately rather than
 waiting until the coroutine returns to its caller.
 
+## Limitations
+
+Only certain kinds of monads can be made to work with the approach in this
+repository. Because coroutines can only move forwards, only monads that invoke
+their continuations *at most once* can be supported.
+
+Monads that are like Maybe and Either are supported fully. These monads' `bind`
+operation invokes, or not, its continuation directly inside `bind`, so there is
+no possibility of it being invoked more than once.
+
+Monads like List cannot be supported. These monads explicitly call their
+continuations multiple times inside `bind`.
+
+Then there are monads like State that store their continuations, building up a
+combined continuation that is invoked later, after `bind` has returned, under
+the control of some other code. This kind of monad is supported with the caveat
+that the resulting continuation may only be invoked at most once.
+
 ## Expected
 
 See [`test_expected.cpp`](test_expected.cpp) for three different ways to compose
