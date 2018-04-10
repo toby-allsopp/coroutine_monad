@@ -228,7 +228,6 @@ struct monad_awaitable {
   template <typename N>
   struct continuation {
     monad_awaitable& awaitable;
-    std::experimental::coroutine_handle<monad_promise<N>> h;
     intrusive_coroutine_handle<monad_promise<N>> ich;
 
     continuation(continuation const&) = delete;
@@ -244,6 +243,7 @@ struct monad_awaitable {
         throw std::logic_error(
             "coroutine continuation invoked after being moved from");
       auto local_ich = std::move(ich);
+      auto& h = local_ich.h;
       // Set the value to be returned from co_await
       awaitable.result.emplace(std::forward<decltype(x)>(x));
       std::cout << this << ": calling resume on " << h.address() << std::endl;
@@ -273,7 +273,7 @@ struct monad_awaitable {
     // that it wants the coroutine to stay alive as long as the continuation
     // stays alive so that it can receive the return value of future suspend
     // points.
-    auto k = continuation<N>{*this, h, ich};
+    auto k = continuation<N>{*this, ich};
     // We call bind with the value that was co_awaited and our continuation. The
     // implementation of bind can choose to call the continuation before
     // returning or some time later or never.
