@@ -230,7 +230,6 @@ struct monad_awaitable {
     monad_awaitable& awaitable;
     std::experimental::coroutine_handle<monad_promise<N>> h;
     intrusive_coroutine_handle<monad_promise<N>> ich;
-    std::shared_ptr<bool> invoked = std::make_shared<bool>(false);
 
     continuation(continuation const&) = delete;
     continuation(continuation&&) = default;
@@ -244,8 +243,6 @@ struct monad_awaitable {
       if (!ich.h)
         throw std::logic_error(
             "coroutine continuation invoked after being moved from");
-      if (std::exchange(*invoked, true))
-        throw std::logic_error("coroutine continuation invoked more than once");
       auto local_ich = std::move(ich);
       // Set the value to be returned from co_await
       awaitable.result.emplace(std::forward<decltype(x)>(x));
