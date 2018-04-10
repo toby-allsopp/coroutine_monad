@@ -21,41 +21,41 @@ auto operator>>=(M&& m, F&& f)
 }
 
 template <typename P>
-struct shared_coroutine_handle {
+struct intrusive_coroutine_handle {
   using handle_type = std::experimental::coroutine_handle<P>;
   handle_type h = {};
 
-  shared_coroutine_handle() = default;
-  shared_coroutine_handle(handle_type h) : h(h) {
+  intrusive_coroutine_handle() = default;
+  intrusive_coroutine_handle(handle_type h) : h(h) {
     // Note that we don't increment the reference count stored in h.promise()
     // here. This is because of the way the promise itself holds a
     // shared_coroutine_handle to itself.
   }
-  shared_coroutine_handle(shared_coroutine_handle const& o)
-      : shared_coroutine_handle() {
+  intrusive_coroutine_handle(intrusive_coroutine_handle const& o)
+      : intrusive_coroutine_handle() {
     *this = o;
     std::cout << this << ": shared_coroutine_handle copy constructor: h = "
               << h.address() << std::endl;
   }
-  shared_coroutine_handle(shared_coroutine_handle&& o) noexcept {
+  intrusive_coroutine_handle(intrusive_coroutine_handle&& o) noexcept {
     h = std::exchange(o.h, {});
     std::cout << this << ": shared_coroutine_handle move constructor: h = "
               << h.address() << std::endl;
   }
 
-  shared_coroutine_handle& operator=(shared_coroutine_handle const& o) {
+  intrusive_coroutine_handle& operator=(intrusive_coroutine_handle const& o) {
     reset();
     h = o.h;
     if (h) h.promise().inc_ref();
     return *this;
   }
-  shared_coroutine_handle& operator=(shared_coroutine_handle&& o) {
+  intrusive_coroutine_handle& operator=(intrusive_coroutine_handle&& o) {
     reset();
     h = std::exchange(o.h, {});
     return *this;
   }
 
-  ~shared_coroutine_handle() {
+  ~intrusive_coroutine_handle() {
     std::cout << this << ": ~shared_coroutine_handle: h = " << h.address()
               << std::endl;
     reset();
@@ -87,10 +87,10 @@ struct monad_promise {
   int ref_count = 0;
   // The use of unique_ptr here is because MSVC 14.11 can't instantiate
   // coroutine_handle for an incomplete type.
-  std::unique_ptr<shared_coroutine_handle<monad_promise>> psch =
-      std::make_unique<shared_coroutine_handle<monad_promise>>(
+  std::unique_ptr<intrusive_coroutine_handle<monad_promise>> pich =
+      std::make_unique<intrusive_coroutine_handle<monad_promise>>(
           handle_type::from_promise(*this));
-  shared_coroutine_handle<monad_promise>& sch = *psch;
+  intrusive_coroutine_handle<monad_promise>& ich = *pich;
   int susp_count = 0;
 
   ~monad_promise() { std::cout << this << ": ~monad_promise" << std::endl; }
@@ -229,24 +229,24 @@ struct monad_awaitable {
   struct continuation {
     monad_awaitable& awaitable;
     std::experimental::coroutine_handle<monad_promise<N>> h;
-    shared_coroutine_handle<monad_promise<N>> sch;
+    intrusive_coroutine_handle<monad_promise<N>> ich;
     std::shared_ptr<bool> invoked = std::make_shared<bool>(false);
 
     continuation(continuation const&) = delete;
     continuation(continuation&&) = default;
 
     continuation& operator=(continuation const&) = delete;
-    continuation& operator=(continuation &&) = delete;
+    continuation& operator=(continuation&&) = delete;
 
     template <typename T>
     auto operator()(T&& x) && {
       std::cout << &awaitable << ": continuation invoked" << std::endl;
-      if (!sch.h)
+      if (!ich.h)
         throw std::logic_error(
             "coroutine continuation invoked after being moved from");
       if (std::exchange(*invoked, true))
         throw std::logic_error("coroutine continuation invoked more than once");
-      auto local_sch = std::move(sch);
+      auto local_ich = std::move(ich);
       // Set the value to be returned from co_await
       awaitable.result.emplace(std::forward<decltype(x)>(x));
       std::cout << this << ": calling resume on " << h.address() << std::endl;
@@ -268,7 +268,7 @@ struct monad_awaitable {
   void await_suspend(std::experimental::coroutine_handle<monad_promise<N>> h) {
     // Register that we require the coroutine to stay alive so that we can write
     // the return value into it.
-    auto sch = h.promise().sch;
+    auto ich = h.promise().ich;
     // Let the promise know that the coroutine is suspended.
     h.promise().on_suspend();
 
@@ -276,7 +276,7 @@ struct monad_awaitable {
     // that it wants the coroutine to stay alive as long as the continuation
     // stays alive so that it can receive the return value of future suspend
     // points.
-    auto k = continuation<N>{*this, h, sch};
+    auto k = continuation<N>{*this, h, ich};
     // We call bind with the value that was co_awaited and our continuation. The
     // implementation of bind can choose to call the continuation before
     // returning or some time later or never.
