@@ -82,20 +82,52 @@ namespace toby::state {
 
   // Non-type-erased transform
   template <typename M, typename F>
-  constexpr auto transform(M&& x, F&& f) {
-    return RawState{[x = std::forward<M>(x), f = std::forward<F>(f)](auto&& s) {
-      auto ret = x.run(FWD(s));
+  struct transformer {
+    M x;
+    F f;
+
+    template <typename S>
+    constexpr auto operator()(S&& s) && {
+      auto ret = std::move(x).run(std::forward<S>(s));
+      return RunResult{std::move(f)(std::move(ret.data)), std::move(ret.state)};
+    }
+    template <typename S>
+    constexpr auto operator()(S&& s) const& {
+      auto ret = x.run(std::forward<S>(s));
       return RunResult{f(std::move(ret.data)), std::move(ret.state)};
-    }};
+    }
+  };
+  template <typename M, typename F>
+  transformer(M, F)->transformer<M, F>;
+
+  template <typename M, typename F>
+  constexpr auto transform(M&& x, F&& f) {
+    return RawState{transformer{std::forward<M>(x), std::forward<F>(f)}};
   }
 
   // Non-type-erased bind
   template <typename M, typename F>
-  constexpr auto bind(M&& x, F&& f) {
-    return RawState{[x = std::forward<M>(x), f = std::forward<F>(f)](auto&& s) {
-      auto ret = x.run(FWD(s));
+  struct binder {
+    M x;
+    F f;
+
+    template <typename S>
+    constexpr auto operator()(S&& s) && {
+      auto ret = std::move(x).run(std::forward<S>(s));
+      return std::move(f)(std::move(ret.data)).run(std::move(ret.state));
+    }
+    template <typename S>
+    constexpr auto operator()(S&& s) const& {
+      auto ret = x.run(std::forward<S>(s));
       return f(std::move(ret.data)).run(std::move(ret.state));
-    }};
+    }
+  };
+  template <typename M, typename F>
+  binder(M, F)->binder<M, F>;
+
+  template <typename M, typename F>
+  constexpr auto bind(M&& x, F&& f) {
+    return RawState{binder{std::forward<M>(x), std::forward<F>(f)}};
   }
 
   using unit = std::tuple<>;
@@ -121,6 +153,9 @@ namespace toby::state {
 
     template <typename F>
     State(RawState<F> rs) : run(std::move(rs.run)) {}
+
+    template <typename OtherFTC>
+    State(State<OtherFTC, S, A> const& other) : run(other.run) {}
   };
 
   template <typename FTC, typename S>

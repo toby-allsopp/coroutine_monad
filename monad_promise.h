@@ -177,26 +177,28 @@ struct monad_promise {
   using TC = std::experimental::type_constructor_t<M>;
   using ValueType = std::experimental::value_type_t<M>;
 
-  // co_await is allowed for any type with the same type_constructor, i.e. the
-  // same monad
+  // co_await is allowed for any type N such that we can construct a value of
+  // our monad with N
   template <typename N,
-            typename = std::enable_if_t<
-                std::is_same_v<std::experimental::type_constructor_t<
-                                   std::experimental::meta::uncvref_t<N>>,
-                               TC>>>
-  auto await_transform(N&& e) {
-    return monad_awaitable<std::experimental::meta::uncvref_t<N>>{
-        std::forward<N>(e)};
+            typename U = std::experimental::value_type_t<
+                std::experimental::meta::uncvref_t<N>>,
+            typename O = std::experimental::meta::invoke<TC, U>,
+            typename = std::enable_if_t<std::is_constructible_v<O, N>>>
+  auto await_transform(N&& m) {
+    return monad_awaitable<O>{std::forward<N>(m)};
   }
 
-  // co_return with a value of the contained type is a shorthand for calling
-  // pure
-  void return_value(ValueType x) {
-    return_value(std::experimental::make<TC>(std::move(x)));
-  }
-  void return_value(M x) {
-    std::cout << this << ": return_value called" << std::endl;
-    emplace_value(std::move(x));
+  template <typename T>
+  void return_value(T&& x) {
+    if constexpr (std::is_same_v<std::experimental::meta::uncvref_t<T>,
+                                 ValueType>) {
+      // co_return with a value of the contained type is a shorthand for calling
+      // pure
+      return_value(std::experimental::make<TC>(std::forward<T>(x)));
+    } else {
+      std::cout << this << ": return_value called" << std::endl;
+      emplace_value(std::forward<T>(x));
+    }
   }
 
   void unhandled_exception() {}
@@ -224,25 +226,29 @@ struct monad_awaitable {
   }
 
   template <typename N>
-  void await_suspend(std::experimental::coroutine_handle<monad_promise<N>> h) {
-    // Register that we require the coroutine to stay alive so that we can write
-    // the return value into it.
-    auto sch = h.promise().sch;
-    // Let the promise know that the coroutine is suspended.
-    h.promise().on_suspend();
+  struct continuation {
+    monad_awaitable& awaitable;
+    std::experimental::coroutine_handle<monad_promise<N>> h;
+    shared_coroutine_handle<monad_promise<N>> sch;
+    std::shared_ptr<bool> invoked = std::make_shared<bool>(false);
 
-    // Create the continuation that we will pass to bind. This also registers
-    // that it wants the coroutine to stay alive as long as the continuation
-    // stays alive so that it can receive the return value of future suspend
-    // points.
-    auto k = [this, h2 = h, sch, invoked = std::make_shared<bool>(false)](
-                 auto&& x) {
+    continuation(continuation const&) = delete;
+    continuation(continuation&&) = default;
+
+    continuation& operator=(continuation const&) = delete;
+    continuation& operator=(continuation &&) = delete;
+
+    template <typename T>
+    auto operator()(T&& x) && {
+      std::cout << &awaitable << ": continuation invoked" << std::endl;
+      if (!sch.h)
+        throw std::logic_error(
+            "coroutine continuation invoked after being moved from");
       if (std::exchange(*invoked, true))
         throw std::logic_error("coroutine continuation invoked more than once");
-      auto h = h2;  // resume() is not const, but it's easily worked around by
-                    // just copying the handle
+      auto local_sch = std::move(sch);
       // Set the value to be returned from co_await
-      result.emplace(std::forward<decltype(x)>(x));
+      awaitable.result.emplace(std::forward<decltype(x)>(x));
       std::cout << this << ": calling resume on " << h.address() << std::endl;
       // Provide storage for the return value
       deferred<N> storage;
@@ -255,7 +261,22 @@ struct monad_awaitable {
       // Return the result of the next bind or co_return
       std::cout << this << ": bind returning" << std::endl;
       return *storage;
-    };
+    }
+  };
+
+  template <typename N>
+  void await_suspend(std::experimental::coroutine_handle<monad_promise<N>> h) {
+    // Register that we require the coroutine to stay alive so that we can write
+    // the return value into it.
+    auto sch = h.promise().sch;
+    // Let the promise know that the coroutine is suspended.
+    h.promise().on_suspend();
+
+    // Create the continuation that we will pass to bind. This also registers
+    // that it wants the coroutine to stay alive as long as the continuation
+    // stays alive so that it can receive the return value of future suspend
+    // points.
+    auto k = continuation<N>{*this, h, sch};
     // We call bind with the value that was co_awaited and our continuation. The
     // implementation of bind can choose to call the continuation before
     // returning or some time later or never.
