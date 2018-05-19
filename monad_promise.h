@@ -179,19 +179,18 @@ struct monad_promise {
 
   // co_await is allowed for any type N such that we can construct a value of
   // our monad with N
-  template <typename N,
-            typename U = std::experimental::value_type_t<
-                std::experimental::meta::uncvref_t<N>>,
-            typename O = std::experimental::meta::invoke<TC, U>,
-            typename = std::enable_if_t<std::is_constructible_v<O, N>>>
+  template <
+      typename N,
+      typename U = std::experimental::value_type_t<std::remove_cvref_t<N>>,
+      typename O = std::experimental::meta::invoke<TC, U>,
+      typename = std::enable_if_t<std::is_constructible_v<O, N>>>
   auto await_transform(N&& m) {
     return monad_awaitable<O>{std::forward<N>(m)};
   }
 
   template <typename T>
   void return_value(T&& x) {
-    if constexpr (std::is_same_v<std::experimental::meta::uncvref_t<T>,
-                                 ValueType>) {
+    if constexpr (std::is_same_v<std::remove_cvref_t<T>, ValueType>) {
       // co_return with a value of the contained type is a shorthand for calling
       // pure
       return_value(std::experimental::make<TC>(std::forward<T>(x)));

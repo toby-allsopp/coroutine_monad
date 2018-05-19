@@ -167,7 +167,7 @@ namespace toby::state {
     using t = invoke<A...>;
 
     template <typename A>
-    static auto pure(A&& x) -> t<std::experimental::meta::uncvref_t<A>> {
+    static auto pure(A&& x) -> t<std::remove_cvref_t<A>> {
       return toby::state::pure(std::forward<A>(x));
     }
 
@@ -202,7 +202,7 @@ namespace std::experimental {
     struct traits<toby::state::StateTC<FTC, S>> : mcd_transform {
       template <typename M, typename F>
       static auto transform(M&& x, F&& f) -> toby::state::
-          State<FTC, S, invoke_result_t<F, value_type_t<meta::uncvref_t<M>>>> {
+          State<FTC, S, invoke_result_t<F, value_type_t<remove_cvref_t<M>>>> {
         return toby::state::transform(std::forward<M>(x), std::forward<F>(f));
       }
     };
@@ -215,7 +215,7 @@ namespace std::experimental {
       static auto bind(M&& x, F&& f) -> toby::state::State<
           FTC,
           S,
-          value_type_t<invoke_result_t<F, value_type_t<meta::uncvref_t<M>>>>> {
+          value_type_t<invoke_result_t<F, value_type_t<remove_cvref_t<M>>>>> {
         return toby::state::bind(std::forward<M>(x), std::forward<F>(f));
       }
     };

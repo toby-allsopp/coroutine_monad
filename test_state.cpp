@@ -33,7 +33,7 @@ struct OneShotFunction {
 
   template <typename F>
   OneShotFunction(F&& f)
-      : invoker(std::make_shared<Invoker<stde::meta::uncvref_t<F>>>(
+      : invoker(std::make_shared<Invoker<std::remove_cvref_t<F>>>(
             std::forward<F>(f))) {}
 
   auto operator()(A... args) && { return std::move(*invoker).invoke(args...); }
