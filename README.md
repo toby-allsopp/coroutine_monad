@@ -43,7 +43,7 @@ a sequence of calls to functions returning `expected` values.
 
 The `expected` in question is that from viboes' std-make repository. This
 definition knows nothing about coroutines; all of the coroutine machinery is in
-[`moand_promise.h`](moand_promise.h) and
+[`monad_promise.h`](monad_promise.h) and
 [`test_expected.cpp`](test_expected.cpp).
 
 Here's what one can write in Haskell:
